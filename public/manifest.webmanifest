@@ -1,0 +1,21 @@
+{
+  "name": "Fortal Store Admin",
+  "short_name": "Fortal Admin",
+  "start_url": "/admin",
+  "display": "standalone",
+  "background_color": "#050816",
+  "theme_color": "#22c55e",
+  "description": "Painel admin da Fortal Store com notificacoes de pedidos.",
+  "icons": [
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-light-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    }
+  ]
+}
