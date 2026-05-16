@@ -17,3 +17,4 @@ node_modules
 *.log
 _tmp_*
 data/*.json
+tsconfig.tsbuildinfo

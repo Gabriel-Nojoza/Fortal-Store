@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
+import { StorageConfigurationError } from "@/lib/blob-json-store"
 import { deleteProduct, getProduct } from "@/lib/store"
 
 export async function DELETE(
@@ -38,6 +39,11 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[v0] Error deleting product:", error)
+
+    if (error instanceof StorageConfigurationError) {
+      return NextResponse.json({ error: error.message }, { status: 503 })
+    }
+
     return NextResponse.json(
       { error: "Erro ao excluir produto" },
       { status: 500 }

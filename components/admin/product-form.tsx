@@ -58,7 +58,7 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!imageFile || selectedSizes.length === 0) {
       alert("Por favor, adicione uma imagem e selecione pelo menos um tamanho.")
       return
@@ -77,7 +77,8 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
       })
 
       if (!uploadResponse.ok) {
-        throw new Error("Erro ao fazer upload da imagem")
+        const payload = await uploadResponse.json().catch(() => null)
+        throw new Error(payload?.error || "Erro ao fazer upload da imagem")
       }
 
       const { imageUrl } = await uploadResponse.json()
@@ -99,7 +100,8 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
       })
 
       if (!productResponse.ok) {
-        throw new Error("Erro ao criar produto")
+        const payload = await productResponse.json().catch(() => null)
+        throw new Error(payload?.error || "Erro ao criar produto")
       }
 
       // Reset form
@@ -110,7 +112,11 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
       onSuccess()
     } catch (error) {
       console.error("Error:", error)
-      alert("Erro ao salvar produto. Tente novamente.")
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Erro ao salvar produto. Tente novamente."
+      )
     } finally {
       setIsSubmitting(false)
     }

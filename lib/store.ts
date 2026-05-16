@@ -1,15 +1,24 @@
 import { promises as fs } from "fs"
 import path from "path"
+import {
+  deleteJsonRecord,
+  ensureServerStorageAvailable,
+  isBlobStorageEnabled,
+  listJsonRecords,
+  putJsonRecord,
+  readJsonRecord,
+} from "@/lib/blob-json-store"
 import type { Product } from "@/lib/types"
 
 const PRODUCTS_FILE = path.join(process.cwd(), "data", "products.json")
+const PRODUCTS_BLOB_PREFIX = "products/"
 
 const initialProducts: Product[] = [
   {
     id: "1",
     name: "Camisa Fortaleza Home 2024",
     description:
-      "Camisa oficial do Fortaleza Esporte Clube para a temporada 2024. Material de alta qualidade com tecnologia de absorção de suor.",
+      "Camisa oficial do Fortaleza Esporte Clube para a temporada 2024. Material de alta qualidade com tecnologia de absorcao de suor.",
     price: 299.9,
     imageUrl: "/uploads/fortaleza-home.jpg",
     sizes: ["P", "M", "G", "GG"],
@@ -29,37 +38,77 @@ const initialProducts: Product[] = [
   },
   {
     id: "3",
-    name: "Camisa Ceará Titular 2024",
+    name: "Camisa Ceara Titular 2024",
     description:
-      "Camisa principal do Ceará Sporting Club. Tradicional listrada em preto e branco.",
+      "Camisa principal do Ceara Sporting Club. Tradicional listrada em preto e branco.",
     price: 279.9,
     imageUrl: "/uploads/ceara-home.jpg",
     sizes: ["M", "G", "GG"],
-    team: "Ceará",
+    team: "Ceara",
     createdAt: "2024-01-17T10:00:00Z",
   },
 ]
 
-async function writeProducts(products: Product[]) {
+function getProductBlobPath(id: string) {
+  return `${PRODUCTS_BLOB_PREFIX}${id}.json`
+}
+
+function sortProducts(products: Product[]) {
+  return [...products].sort(
+    (left, right) =>
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+  )
+}
+
+async function writeProductsToFile(products: Product[]) {
+  await fs.mkdir(path.dirname(PRODUCTS_FILE), { recursive: true })
   await fs.writeFile(PRODUCTS_FILE, JSON.stringify(products, null, 2), "utf-8")
 }
 
-async function readProducts() {
+async function readProductsFromFile() {
   try {
     const contents = await fs.readFile(PRODUCTS_FILE, "utf-8")
     const parsed = JSON.parse(contents)
 
-    return Array.isArray(parsed) ? (parsed as Product[]) : initialProducts
+    return Array.isArray(parsed)
+      ? sortProducts(parsed as Product[])
+      : sortProducts(initialProducts)
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException
 
     if (nodeError.code === "ENOENT") {
-      await writeProducts(initialProducts)
-      return initialProducts
+      await writeProductsToFile(initialProducts)
+      return sortProducts(initialProducts)
     }
 
     throw error
   }
+}
+
+async function seedBlobProducts() {
+  await Promise.all(
+    initialProducts.map((product) =>
+      putJsonRecord(getProductBlobPath(product.id), product)
+    )
+  )
+
+  return sortProducts(initialProducts)
+}
+
+async function readProducts() {
+  ensureServerStorageAvailable()
+
+  if (isBlobStorageEnabled()) {
+    const products = await listJsonRecords<Product>(PRODUCTS_BLOB_PREFIX)
+
+    if (products.length > 0) {
+      return sortProducts(products)
+    }
+
+    return seedBlobProducts()
+  }
+
+  return readProductsFromFile()
 }
 
 export async function getProducts() {
@@ -72,25 +121,60 @@ export async function getProduct(id: string) {
 }
 
 export async function addProduct(product: Product) {
-  const products = await readProducts()
+  ensureServerStorageAvailable()
+
+  if (isBlobStorageEnabled()) {
+    await readProducts()
+    await putJsonRecord(getProductBlobPath(product.id), product)
+    return
+  }
+
+  const products = await readProductsFromFile()
   products.unshift(product)
-  await writeProducts(products)
+  await writeProductsToFile(products)
 }
 
 export async function deleteProduct(id: string) {
-  const products = await readProducts()
+  ensureServerStorageAvailable()
+
+  if (isBlobStorageEnabled()) {
+    const products = await readProducts()
+    const exists = products.some((product) => product.id === id)
+
+    if (!exists) {
+      return false
+    }
+
+    return deleteJsonRecord(getProductBlobPath(id))
+  }
+
+  const products = await readProductsFromFile()
   const nextProducts = products.filter((product) => product.id !== id)
 
   if (nextProducts.length === products.length) {
     return false
   }
 
-  await writeProducts(nextProducts)
+  await writeProductsToFile(nextProducts)
   return true
 }
 
 export async function updateProduct(id: string, product: Product) {
-  const products = await readProducts()
+  ensureServerStorageAvailable()
+
+  if (isBlobStorageEnabled()) {
+    await readProducts()
+    const currentProduct = await readJsonRecord<Product>(getProductBlobPath(id))
+
+    if (!currentProduct) {
+      return false
+    }
+
+    await putJsonRecord(getProductBlobPath(id), product)
+    return true
+  }
+
+  const products = await readProductsFromFile()
   const index = products.findIndex((item) => item.id === id)
 
   if (index === -1) {
@@ -98,6 +182,6 @@ export async function updateProduct(id: string, product: Product) {
   }
 
   products[index] = product
-  await writeProducts(products)
+  await writeProductsToFile(products)
   return true
 }

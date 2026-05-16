@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
+import { StorageConfigurationError } from "@/lib/blob-json-store"
 import { createOrder, getOrders } from "@/lib/order-store"
 import { getProducts } from "@/lib/store"
 import { sendNewOrderPushNotifications } from "@/lib/web-push"
@@ -58,6 +59,11 @@ export async function GET() {
     return NextResponse.json(orders)
   } catch (error) {
     console.error("[orders] Error getting orders:", error)
+
+    if (error instanceof StorageConfigurationError) {
+      return NextResponse.json({ error: error.message }, { status: 503 })
+    }
+
     return NextResponse.json(
       { error: "Erro ao carregar pedidos" },
       { status: 500 }
@@ -159,6 +165,11 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     console.error("[orders] Error creating order:", error)
+
+    if (error instanceof StorageConfigurationError) {
+      return NextResponse.json({ error: error.message }, { status: 503 })
+    }
+
     return NextResponse.json(
       { error: "Erro ao enviar pedido" },
       { status: 500 }

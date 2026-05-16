@@ -1,15 +1,28 @@
 import { randomUUID } from "crypto"
 import { promises as fs } from "fs"
 import path from "path"
+import {
+  ensureServerStorageAvailable,
+  isBlobStorageEnabled,
+  listJsonRecords,
+  putJsonRecord,
+  readJsonRecord,
+} from "@/lib/blob-json-store"
 import type { Order, OrderStatus } from "@/lib/types"
 
 const ORDERS_FILE = path.join(process.cwd(), "data", "orders.json")
+const ORDERS_BLOB_PREFIX = "orders/"
 
-async function writeOrders(orders: Order[]) {
+function getOrderBlobPath(id: string) {
+  return `${ORDERS_BLOB_PREFIX}${id}.json`
+}
+
+async function writeOrdersToFile(orders: Order[]) {
+  await fs.mkdir(path.dirname(ORDERS_FILE), { recursive: true })
   await fs.writeFile(ORDERS_FILE, JSON.stringify(orders, null, 2), "utf-8")
 }
 
-async function readOrders() {
+async function readOrdersFromFile() {
   try {
     const contents = await fs.readFile(ORDERS_FILE, "utf-8")
     const parsed = JSON.parse(contents)
@@ -19,7 +32,7 @@ async function readOrders() {
     const nodeError = error as NodeJS.ErrnoException
 
     if (nodeError.code === "ENOENT") {
-      await writeOrders([])
+      await writeOrdersToFile([])
       return []
     }
 
@@ -34,15 +47,23 @@ function sortOrdersByDate(orders: Order[]) {
   )
 }
 
+async function readOrders() {
+  ensureServerStorageAvailable()
+
+  if (isBlobStorageEnabled()) {
+    return listJsonRecords<Order>(ORDERS_BLOB_PREFIX)
+  }
+
+  return readOrdersFromFile()
+}
+
 export async function getOrders() {
   const orders = await readOrders()
   return sortOrdersByDate(orders)
 }
 
-export async function createOrder(
-  orderData: Omit<Order, "id" | "createdAt">
-) {
-  const orders = await readOrders()
+export async function createOrder(orderData: Omit<Order, "id" | "createdAt">) {
+  ensureServerStorageAvailable()
 
   const newOrder: Order = {
     ...orderData,
@@ -50,14 +71,38 @@ export async function createOrder(
     createdAt: new Date().toISOString(),
   }
 
+  if (isBlobStorageEnabled()) {
+    await putJsonRecord(getOrderBlobPath(newOrder.id), newOrder)
+    return newOrder
+  }
+
+  const orders = await readOrdersFromFile()
   orders.unshift(newOrder)
-  await writeOrders(orders)
+  await writeOrdersToFile(orders)
 
   return newOrder
 }
 
 export async function updateOrderStatus(id: string, status: OrderStatus) {
-  const orders = await readOrders()
+  ensureServerStorageAvailable()
+
+  if (isBlobStorageEnabled()) {
+    const currentOrder = await readJsonRecord<Order>(getOrderBlobPath(id))
+
+    if (!currentOrder) {
+      return null
+    }
+
+    const updatedOrder: Order = {
+      ...currentOrder,
+      status,
+    }
+
+    await putJsonRecord(getOrderBlobPath(id), updatedOrder)
+    return updatedOrder
+  }
+
+  const orders = await readOrdersFromFile()
   const orderIndex = orders.findIndex((order) => order.id === id)
 
   if (orderIndex === -1) {
@@ -69,6 +114,6 @@ export async function updateOrderStatus(id: string, status: OrderStatus) {
     status,
   }
 
-  await writeOrders(orders)
+  await writeOrdersToFile(orders)
   return orders[orderIndex]
 }

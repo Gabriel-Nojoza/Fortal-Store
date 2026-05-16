@@ -9,7 +9,8 @@ async function requestProducts(): Promise<Product[]> {
   })
 
   if (!response.ok) {
-    throw new Error("Erro ao carregar produtos")
+    const payload = await response.json().catch(() => null)
+    throw new Error(payload?.error || "Erro ao carregar produtos")
   }
 
   return response.json()

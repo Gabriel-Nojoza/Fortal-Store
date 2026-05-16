@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
+import { StorageConfigurationError } from "@/lib/blob-json-store"
 import {
   removePushSubscription,
   savePushSubscription,
@@ -59,6 +60,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[push] Error saving subscription:", error)
+
+    if (error instanceof StorageConfigurationError) {
+      return NextResponse.json({ error: error.message }, { status: 503 })
+    }
+
     return NextResponse.json(
       { error: "Erro ao ativar notificacoes push." },
       { status: 500 }
@@ -91,6 +97,11 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[push] Error removing subscription:", error)
+
+    if (error instanceof StorageConfigurationError) {
+      return NextResponse.json({ error: error.message }, { status: 503 })
+    }
+
     return NextResponse.json(
       { error: "Erro ao desativar notificacoes push." },
       { status: 500 }

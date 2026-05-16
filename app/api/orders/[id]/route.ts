@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
+import { StorageConfigurationError } from "@/lib/blob-json-store"
 import { updateOrderStatus } from "@/lib/order-store"
 
 const statusSchema = z.object({
@@ -44,6 +45,11 @@ export async function PATCH(
     return NextResponse.json(order)
   } catch (error) {
     console.error("[orders] Error updating order:", error)
+
+    if (error instanceof StorageConfigurationError) {
+      return NextResponse.json({ error: error.message }, { status: 503 })
+    }
+
     return NextResponse.json(
       { error: "Erro ao atualizar pedido" },
       { status: 500 }
