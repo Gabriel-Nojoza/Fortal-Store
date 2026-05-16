@@ -6,6 +6,7 @@ import {
   CreditCard,
   Eye,
   MapPin,
+  MessageCircle,
   Package,
   Phone,
   Store,
@@ -45,6 +46,70 @@ function formatOrderDate(value: string) {
   }).format(new Date(value))
 }
 
+function normalizeWhatsappPhone(value: string) {
+  const digits = value.replace(/\D/g, "").replace(/^0+/, "")
+
+  if (!digits) {
+    return null
+  }
+
+  if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) {
+    return digits
+  }
+
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`
+  }
+
+  if (digits.length >= 12 && digits.length <= 13) {
+    return digits
+  }
+
+  return null
+}
+
+function buildDeliverySummary(order: Order) {
+  if (!order.address) {
+    return DELIVERY_LABELS[order.deliveryMethod]
+  }
+
+  const reference = order.address.reference
+    ? `, ref. ${order.address.reference}`
+    : ""
+
+  return `${DELIVERY_LABELS[order.deliveryMethod]} - ${order.address.street}, ${order.address.number}, ${order.address.neighborhood}${reference}`
+}
+
+function buildWhatsappMessage(order: Order) {
+  const itemsSummary = order.items
+    .map((item) => `- ${item.name} | Tam. ${item.size} | x${item.quantity}`)
+    .join("\n")
+
+  return [
+    `Ola, ${order.customer.name}! Aqui e da Fortal Store.`,
+    "",
+    `Recebemos seu pedido ${order.id}.`,
+    `Total: ${formatMoney(order.totalPrice)}`,
+    `Pagamento: ${PAYMENT_LABELS[order.paymentMethod]}`,
+    `Entrega: ${buildDeliverySummary(order)}`,
+    "",
+    "Itens do pedido:",
+    itemsSummary,
+    "",
+    "Se estiver tudo certo, responda esta mensagem para finalizarmos seu pedido e pagamento.",
+  ].join("\n")
+}
+
+function buildWhatsappLink(order: Order) {
+  const phone = normalizeWhatsappPhone(order.customer.whatsapp)
+
+  if (!phone) {
+    return null
+  }
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(buildWhatsappMessage(order))}`
+}
+
 export function OrdersPanel({
   orders,
   isLoading,
@@ -61,7 +126,9 @@ export function OrdersPanel({
           </CardTitle>
           <Badge
             variant={newOrderCount > 0 ? "default" : "outline"}
-            className={newOrderCount > 0 ? "bg-primary text-primary-foreground" : ""}
+            className={
+              newOrderCount > 0 ? "bg-primary text-primary-foreground" : ""
+            }
           >
             {newOrderCount > 0
               ? `${newOrderCount} novo(s)`
@@ -99,152 +166,174 @@ export function OrdersPanel({
           </div>
         ) : (
           <div className="space-y-4">
-            {orders.map((order) => (
-              <div
-                key={order.id}
-                className="rounded-2xl border border-border bg-secondary/30 p-4"
-              >
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-semibold text-foreground">
-                        {order.customer.name}
-                      </h3>
-                      <Badge variant="outline">{order.id}</Badge>
-                      {order.status === "novo" ? (
-                        <Badge className="bg-primary text-primary-foreground">
-                          Novo pedido
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">Visualizado</Badge>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <Phone className="h-4 w-4" />
-                        {order.customer.whatsapp}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Clock3 className="h-4 w-4" />
-                        {formatOrderDate(order.createdAt)}
-                      </span>
-                    </div>
-                  </div>
+            {orders.map((order) => {
+              const whatsappLink = buildWhatsappLink(order)
 
-                  <div className="text-left md:text-right">
-                    <p className="text-sm text-muted-foreground">
-                      {order.totalItems} item(ns)
-                    </p>
-                    <p className="text-2xl font-bold text-accent">
-                      {formatMoney(order.totalPrice)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                  <div className="space-y-3">
-                    <div className="rounded-xl border border-border bg-background/70 p-3">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                        Pagamento
-                      </p>
-                      <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
-                        <CreditCard className="h-4 w-4 text-primary" />
-                        {PAYMENT_LABELS[order.paymentMethod]}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-border bg-background/70 p-3">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                        Entrega
-                      </p>
-                      <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
-                        {order.deliveryMethod === "retirada" ? (
-                          <Store className="h-4 w-4 text-primary" />
+              return (
+                <div
+                  key={order.id}
+                  className="rounded-2xl border border-border bg-secondary/30 p-4"
+                >
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-semibold text-foreground">
+                          {order.customer.name}
+                        </h3>
+                        <Badge variant="outline">{order.id}</Badge>
+                        {order.status === "novo" ? (
+                          <Badge className="bg-primary text-primary-foreground">
+                            Novo pedido
+                          </Badge>
                         ) : (
-                          <Truck className="h-4 w-4 text-primary" />
+                          <Badge variant="secondary">Visualizado</Badge>
                         )}
-                        {DELIVERY_LABELS[order.deliveryMethod]}
-                      </p>
-
-                      {order.address ? (
-                        <p className="mt-2 inline-flex items-start gap-2 text-sm leading-6 text-muted-foreground">
-                          <MapPin className="mt-1 h-4 w-4 shrink-0" />
-                          <span>
-                            {order.address.street}, {order.address.number}
-                            <br />
-                            {order.address.neighborhood}
-                            {order.address.reference
-                              ? ` • Ref.: ${order.address.reference}`
-                              : ""}
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Cliente vai retirar o pedido.
-                        </p>
-                      )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <Phone className="h-4 w-4" />
+                          {order.customer.whatsapp}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Clock3 className="h-4 w-4" />
+                          {formatOrderDate(order.createdAt)}
+                        </span>
+                      </div>
                     </div>
 
-                    {order.notes ? (
+                    <div className="text-left md:text-right">
+                      <p className="text-sm text-muted-foreground">
+                        {order.totalItems} item(ns)
+                      </p>
+                      <p className="text-2xl font-bold text-accent">
+                        {formatMoney(order.totalPrice)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                    <div className="space-y-3">
                       <div className="rounded-xl border border-border bg-background/70 p-3">
                         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                          Observacoes
+                          Pagamento
                         </p>
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          {order.notes}
+                        <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+                          <CreditCard className="h-4 w-4 text-primary" />
+                          {PAYMENT_LABELS[order.paymentMethod]}
                         </p>
                       </div>
-                    ) : null}
-                  </div>
 
-                  <div className="rounded-xl border border-border bg-background/70 p-3">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                      Itens do pedido
-                    </p>
+                      <div className="rounded-xl border border-border bg-background/70 p-3">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          Entrega
+                        </p>
+                        <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+                          {order.deliveryMethod === "retirada" ? (
+                            <Store className="h-4 w-4 text-primary" />
+                          ) : (
+                            <Truck className="h-4 w-4 text-primary" />
+                          )}
+                          {DELIVERY_LABELS[order.deliveryMethod]}
+                        </p>
 
-                    <div className="space-y-3">
-                      {order.items.map((item) => (
-                        <div
-                          key={`${order.id}-${item.id}`}
-                          className="flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-secondary/30 p-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="line-clamp-2 text-sm font-medium text-foreground">
-                              {item.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {item.team} • Tam. {item.size}
-                            </p>
-                          </div>
+                        {order.address ? (
+                          <p className="mt-2 inline-flex items-start gap-2 text-sm leading-6 text-muted-foreground">
+                            <MapPin className="mt-1 h-4 w-4 shrink-0" />
+                            <span>
+                              {order.address.street}, {order.address.number}
+                              <br />
+                              {order.address.neighborhood}
+                              {order.address.reference
+                                ? ` • Ref.: ${order.address.reference}`
+                                : ""}
+                            </span>
+                          </p>
+                        ) : (
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Cliente vai retirar o pedido.
+                          </p>
+                        )}
+                      </div>
 
-                          <div className="text-right">
-                            <p className="text-sm font-semibold text-foreground">
-                              x{item.quantity}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatMoney(item.price * item.quantity)}
-                            </p>
-                          </div>
+                      {order.notes ? (
+                        <div className="rounded-xl border border-border bg-background/70 p-3">
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                            Observacoes
+                          </p>
+                          <p className="text-sm leading-6 text-muted-foreground">
+                            {order.notes}
+                          </p>
                         </div>
-                      ))}
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-background/70 p-3">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                        Itens do pedido
+                      </p>
+
+                      <div className="space-y-3">
+                        {order.items.map((item) => (
+                          <div
+                            key={`${order.id}-${item.id}`}
+                            className="flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-secondary/30 p-3"
+                          >
+                            <div className="min-w-0">
+                              <p className="line-clamp-2 text-sm font-medium text-foreground">
+                                {item.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.team} • Tam. {item.size}
+                              </p>
+                            </div>
+
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-foreground">
+                                x{item.quantity}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatMoney(item.price * item.quantity)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {order.status === "novo" ? (
-                  <div className="mt-4 flex justify-end">
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => onMarkAsSeen(order.id)}
-                    >
-                      <Eye className="h-4 w-4" />
-                      Marcar como visualizado
-                    </Button>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                    {whatsappLink ? (
+                      <Button asChild className="gap-2">
+                        <a
+                          href={whatsappLink}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          Chamar no WhatsApp
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button variant="outline" disabled className="gap-2">
+                        <MessageCircle className="h-4 w-4" />
+                        WhatsApp invalido
+                      </Button>
+                    )}
+
+                    {order.status === "novo" ? (
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => onMarkAsSeen(order.id)}
+                      >
+                        <Eye className="h-4 w-4" />
+                        Marcar como visualizado
+                      </Button>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            ))}
+                </div>
+              )
+            })}
           </div>
         )}
       </CardContent>
