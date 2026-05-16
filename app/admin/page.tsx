@@ -5,11 +5,13 @@ import { LogOut, RefreshCw, ShoppingBag } from "lucide-react"
 import Link from "next/link"
 import { AuthProvider, useAuth } from "@/components/admin/auth-provider"
 import { LoginForm } from "@/components/admin/login-form"
+import { OrderNotesPanel } from "@/components/admin/order-notes-panel"
 import { OrdersPanel } from "@/components/admin/orders-panel"
 import { PushNotificationSettings } from "@/components/admin/push-notification-settings"
 import { ProductForm } from "@/components/admin/product-form"
 import { ProductList } from "@/components/admin/product-list"
 import { Button } from "@/components/ui/button"
+import { useOrderNotes } from "@/hooks/use-order-notes"
 import { useOrders } from "@/hooks/use-orders"
 import { useProducts } from "@/hooks/use-products"
 import { toast } from "@/hooks/use-toast"
@@ -43,6 +45,13 @@ function AdminDashboard() {
     refreshOrders,
     markOrderAsSeen,
   } = useOrders(isAuthenticated, handleNewOrders)
+  const {
+    notes,
+    isLoading: isNotesLoading,
+    refreshOrderNotes,
+    createNote,
+    deleteNote,
+  } = useOrderNotes(isAuthenticated)
 
   const handleDelete = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este produto?")) {
@@ -61,7 +70,7 @@ function AdminDashboard() {
   }
 
   const handleRefreshAll = async () => {
-    await Promise.all([refreshProducts(), refreshOrders()])
+    await Promise.all([refreshProducts(), refreshOrders(), refreshOrderNotes()])
   }
 
   if (!isAuthenticated) {
@@ -135,12 +144,32 @@ function AdminDashboard() {
           )}
         </div>
 
-        <div className="mt-8">
+        <div className="mt-8 grid gap-8 2xl:grid-cols-[1.2fr_0.8fr]">
           <OrdersPanel
             orders={orders}
             isLoading={isOrdersLoading}
             newOrderCount={newOrderCount}
             onMarkAsSeen={(id) => void markOrderAsSeen(id)}
+          />
+
+          <OrderNotesPanel
+            orders={orders}
+            notes={notes}
+            isLoading={isNotesLoading}
+            onCreateNote={async (input) => {
+              await createNote(input)
+              toast({
+                title: "Anotacao salva",
+                description: "Sua anotacao do pedido foi guardada no painel.",
+              })
+            }}
+            onDeleteNote={async (id) => {
+              await deleteNote(id)
+              toast({
+                title: "Anotacao removida",
+                description: "A anotacao foi excluida do painel.",
+              })
+            }}
           />
         </div>
       </main>

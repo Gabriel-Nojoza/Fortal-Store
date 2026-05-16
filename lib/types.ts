@@ -50,6 +50,15 @@ export interface Order {
   createdAt: string
 }
 
+export interface OrderNote {
+  id: string
+  orderId: string
+  customerName: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface StoredPushSubscription {
   endpoint: string
   expirationTime: number | null
