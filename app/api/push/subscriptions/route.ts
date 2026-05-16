@@ -8,14 +8,40 @@ import {
 } from "@/lib/push-subscription-store"
 import { isWebPushConfigured } from "@/lib/web-push"
 
-const subscriptionSchema = z.object({
-  endpoint: z.string().url(),
-  expirationTime: z.number().nullable(),
-  keys: z.object({
-    p256dh: z.string().min(1),
-    auth: z.string().min(1),
-  }),
-})
+const subscriptionSchema = z
+  .object({
+    endpoint: z.string().url(),
+    expirationTime: z.number().nullable().optional().default(null),
+    keys: z.object({
+      p256dh: z.string().optional(),
+      auth: z.string().optional(),
+    }),
+  })
+  .superRefine((subscription, context) => {
+    if (!subscription.keys.p256dh) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A assinatura push nao trouxe a chave p256dh.",
+        path: ["keys", "p256dh"],
+      })
+    }
+
+    if (!subscription.keys.auth) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A assinatura push nao trouxe a chave auth.",
+        path: ["keys", "auth"],
+      })
+    }
+  })
+  .transform((subscription) => ({
+    endpoint: subscription.endpoint,
+    expirationTime: subscription.expirationTime,
+    keys: {
+      p256dh: subscription.keys.p256dh ?? "",
+      auth: subscription.keys.auth ?? "",
+    },
+  }))
 
 const subscribeSchema = z.object({
   subscription: subscriptionSchema,
@@ -49,8 +75,12 @@ export async function POST(request: Request) {
     const parsed = subscribeSchema.safeParse(body)
 
     if (!parsed.success) {
+      console.error("[push] Invalid subscription payload:", parsed.error.flatten())
       return NextResponse.json(
-        { error: "Dados de notificacao invalidos." },
+        {
+          error:
+            parsed.error.issues[0]?.message || "Dados de notificacao invalidos.",
+        },
         { status: 400 }
       )
     }
