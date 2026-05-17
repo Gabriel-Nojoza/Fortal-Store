@@ -73,11 +73,13 @@ export async function createOrderNote(
   const now = new Date().toISOString()
   const note: OrderNote = {
     id: `NOTE-${randomUUID().split("-")[0].toUpperCase()}`,
-    orderId: input.orderId,
-    customerName: input.customerName,
+    title: input.title,
+    reference: input.reference?.trim() || "",
     content: input.content,
     createdAt: now,
     updatedAt: now,
+    orderId: input.orderId ?? null,
+    customerName: input.customerName ?? null,
   }
 
   if (isBlobStorageEnabled()) {

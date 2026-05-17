@@ -153,14 +153,13 @@ function AdminDashboard() {
           />
 
           <OrderNotesPanel
-            orders={orders}
             notes={notes}
             isLoading={isNotesLoading}
             onCreateNote={async (input) => {
               await createNote(input)
               toast({
                 title: "Anotacao salva",
-                description: "Sua anotacao do pedido foi guardada no painel.",
+                description: "Sua anotacao da loja foi guardada no painel.",
               })
             }}
             onDeleteNote={async (id) => {

@@ -5,12 +5,16 @@ import { StorageConfigurationError } from "@/lib/blob-json-store"
 import { createOrderNote, getOrderNotes } from "@/lib/order-notes-store"
 
 const createOrderNoteSchema = z.object({
-  orderId: z.string().trim().min(1, "Selecione um pedido."),
-  customerName: z.string().trim().min(1, "Cliente invalido."),
+  title: z
+    .string()
+    .trim()
+    .min(2, "Digite um titulo para lembrar dessa anotacao.")
+    .max(120, "O titulo ficou muito longo."),
+  reference: z.string().trim().max(80).optional().default(""),
   content: z
     .string()
     .trim()
-    .min(3, "Digite a anotacao do pedido.")
+    .min(3, "Digite a anotacao da loja.")
     .max(1000, "A anotacao ficou muito longa."),
 })
 

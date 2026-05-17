@@ -52,11 +52,13 @@ export interface Order {
 
 export interface OrderNote {
   id: string
-  orderId: string
-  customerName: string
+  title: string
+  reference?: string
   content: string
   createdAt: string
   updatedAt: string
+  orderId?: string | null
+  customerName?: string | null
 }
 
 export interface StoredPushSubscription {

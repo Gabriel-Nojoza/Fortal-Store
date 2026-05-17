@@ -1,20 +1,20 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { FileText, Loader2, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import type { Order, OrderNote } from "@/lib/types"
+import type { OrderNote } from "@/lib/types"
 
 interface OrderNotesPanelProps {
-  orders: Order[]
   notes: OrderNote[]
   isLoading: boolean
   onCreateNote: (input: {
-    orderId: string
-    customerName: string
+    title: string
+    reference?: string
     content: string
   }) => Promise<void>
   onDeleteNote: (id: string) => Promise<void>
@@ -28,40 +28,34 @@ function formatNoteDate(value: string) {
 }
 
 export function OrderNotesPanel({
-  orders,
   notes,
   isLoading,
   onCreateNote,
   onDeleteNote,
 }: OrderNotesPanelProps) {
-  const [selectedOrderId, setSelectedOrderId] = useState("")
+  const [title, setTitle] = useState("")
+  const [reference, setReference] = useState("")
   const [content, setContent] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const selectedOrder = useMemo(
-    () => orders.find((order) => order.id === selectedOrderId) ?? null,
-    [orders, selectedOrderId]
-  )
-
-  const hasOrders = orders.length > 0
-
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!selectedOrder || content.trim().length < 3) {
+    if (title.trim().length < 2 || content.trim().length < 3) {
       return
     }
 
     try {
       setIsSubmitting(true)
       await onCreateNote({
-        orderId: selectedOrder.id,
-        customerName: selectedOrder.customer.name,
+        title: title.trim(),
+        reference: reference.trim(),
         content: content.trim(),
       })
+      setTitle("")
+      setReference("")
       setContent("")
-      setSelectedOrderId("")
     } finally {
       setIsSubmitting(false)
     }
@@ -81,7 +75,7 @@ export function OrderNotesPanel({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-foreground">
           <FileText className="h-5 w-5 text-primary" />
-          Anotacoes de pedidos
+          Anotacoes da loja
         </CardTitle>
       </CardHeader>
 
@@ -89,21 +83,28 @@ export function OrderNotesPanel({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">
-              Pedido
+              Titulo
             </label>
-            <select
-              value={selectedOrderId}
-              onChange={(event) => setSelectedOrderId(event.target.value)}
-              disabled={!hasOrders || isSubmitting}
-              className="flex h-11 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground"
-            >
-              <option value="">Selecione um pedido</option>
-              {orders.map((order) => (
-                <option key={order.id} value={order.id}>
-                  {order.id} - {order.customer.name}
-                </option>
-              ))}
-            </select>
+            <Input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Ex: Produtos para pegar na segunda"
+              className="bg-input"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">
+              Referencia
+            </label>
+            <Input
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              placeholder="Ex: Segunda-feira, fornecedor, lista do dia"
+              className="bg-input"
+              disabled={isSubmitting}
+            />
           </div>
 
           <div className="space-y-2">
@@ -113,16 +114,16 @@ export function OrderNotesPanel({
             <Textarea
               value={content}
               onChange={(event) => setContent(event.target.value)}
-              placeholder="Ex: cliente pediu envio apos 18h, aguardando comprovante Pix..."
+              placeholder="Ex: pegar 12 camisas do Brasil, 4 do Fortaleza e confirmar pagamento do lote..."
               className="min-h-28 bg-input"
-              disabled={!hasOrders || isSubmitting}
+              disabled={isSubmitting}
             />
           </div>
 
           <Button
             type="submit"
             disabled={
-              isSubmitting || !selectedOrder || content.trim().length < 3
+              isSubmitting || title.trim().length < 2 || content.trim().length < 3
             }
             className="w-full sm:w-auto"
           >
@@ -147,8 +148,8 @@ export function OrderNotesPanel({
               Nenhuma anotacao criada ainda
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Use esta area para anotar combinados, pagamento e observacoes dos
-              pedidos.
+              Use esta area para anotar o que precisa buscar, separar ou lembrar
+              na loja.
             </p>
           </div>
         ) : (
@@ -161,8 +162,10 @@ export function OrderNotesPanel({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{note.orderId}</Badge>
-                      <Badge variant="secondary">{note.customerName}</Badge>
+                      <Badge variant="outline">{note.title || "Anotacao"}</Badge>
+                      {note.reference ? (
+                        <Badge variant="secondary">{note.reference}</Badge>
+                      ) : null}
                       <span className="text-xs text-muted-foreground">
                         {formatNoteDate(note.updatedAt)}
                       </span>

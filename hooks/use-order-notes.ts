@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react"
 import type { OrderNote } from "@/lib/types"
 
 interface CreateOrderNoteInput {
-  orderId: string
-  customerName: string
+  title: string
+  reference?: string
   content: string
 }
 
