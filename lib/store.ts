@@ -122,13 +122,6 @@ export async function deleteProduct(id: string) {
   ensureServerStorageAvailable()
 
   if (isBlobStorageEnabled()) {
-    const products = await readProducts()
-    const exists = products.some((product) => product.id === id)
-
-    if (!exists) {
-      return false
-    }
-
     return deleteJsonRecord(getProductBlobPath(id))
   }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
 import { StorageConfigurationError } from "@/lib/blob-json-store"
-import { deleteProduct, getProduct } from "@/lib/store"
+import { deleteProduct } from "@/lib/store"
 
 export async function DELETE(
   request: Request,
@@ -18,21 +18,12 @@ export async function DELETE(
     }
 
     const { id } = await params
-    const product = await getProduct(id)
-
-    if (!product) {
-      return NextResponse.json(
-        { error: "Produto não encontrado" },
-        { status: 404 }
-      )
-    }
-
     const deleted = await deleteProduct(id)
 
     if (!deleted) {
       return NextResponse.json(
-        { error: "Erro ao excluir produto" },
-        { status: 500 }
+        { error: "Produto não encontrado" },
+        { status: 404 }
       )
     }
 

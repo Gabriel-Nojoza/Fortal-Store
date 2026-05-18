@@ -2,6 +2,7 @@ import {
   BlobNotFoundError,
   del,
   get,
+  head,
   list,
   put,
 } from "@vercel/blob"
@@ -125,7 +126,8 @@ export async function deleteJsonRecord(pathname: string) {
   }
 
   try {
-    await del(pathname)
+    const blob = await head(pathname)
+    await del(blob.url)
     return true
   } catch (error) {
     if (error instanceof BlobNotFoundError) {

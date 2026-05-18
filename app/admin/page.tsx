@@ -63,7 +63,11 @@ function AdminDashboard() {
       await deleteProduct(id)
     } catch (error) {
       console.error("Erro ao excluir produto:", error)
-      alert("Nao foi possivel excluir o produto.")
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel excluir o produto."
+      )
     } finally {
       setIsDeleting(null)
     }
