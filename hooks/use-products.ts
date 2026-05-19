@@ -19,13 +19,18 @@ async function requestProducts(): Promise<Product[]> {
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const refreshProducts = useCallback(async () => {
     try {
+      setError(null)
       const nextProducts = await requestProducts()
       setProducts(nextProducts)
     } catch (error) {
       console.error("Erro ao buscar produtos:", error)
+      setError(
+        error instanceof Error ? error.message : "Erro ao carregar produtos"
+      )
     } finally {
       setIsLoading(false)
     }
@@ -51,6 +56,7 @@ export function useProducts() {
   return {
     products,
     isLoading,
+    error,
     deleteProduct,
     refreshProducts,
   }

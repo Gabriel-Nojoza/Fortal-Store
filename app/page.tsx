@@ -8,7 +8,7 @@ import { useCart } from "@/hooks/use-cart"
 import { useProducts } from "@/hooks/use-products"
 
 export default function HomePage() {
-  const { products, isLoading } = useProducts()
+  const { products, isLoading, error } = useProducts()
   const {
     items,
     totalItems,
@@ -39,7 +39,7 @@ export default function HomePage() {
               <h2 className="text-2xl font-bold text-foreground">
                 Nossos Produtos
               </h2>
-              {!isLoading && (
+              {!isLoading && !error && (
                 <p className="text-sm text-muted-foreground">
                   {products.length}{" "}
                   {products.length === 1
@@ -56,6 +56,13 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground">
                 Carregando produtos...
               </p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-destructive/40 bg-card py-16 text-center">
+              <p className="mb-2 text-lg font-medium text-foreground">
+                Não foi possível carregar os produtos
+              </p>
+              <p className="text-sm text-muted-foreground">{error}</p>
             </div>
           ) : products.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card py-16">

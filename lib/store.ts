@@ -77,7 +77,11 @@ async function readProductsFromFile() {
     const nodeError = error as NodeJS.ErrnoException
 
     if (nodeError.code === "ENOENT") {
-      await writeProductsToFile(initialProducts)
+      try {
+        await writeProductsToFile(initialProducts)
+      } catch {
+        // Read-only environments such as Vercel can still serve the fallback data.
+      }
       return sortProducts(initialProducts)
     }
 
@@ -106,7 +110,7 @@ export async function getProduct(id: string) {
 }
 
 export async function addProduct(product: Product) {
-  ensureServerStorageAvailable()
+  ensureServerStorageAvailable("write")
 
   if (isBlobStorageEnabled()) {
     await putJsonRecord(getProductBlobPath(product.id), product)
@@ -119,7 +123,7 @@ export async function addProduct(product: Product) {
 }
 
 export async function deleteProduct(id: string) {
-  ensureServerStorageAvailable()
+  ensureServerStorageAvailable("write")
 
   if (isBlobStorageEnabled()) {
     return deleteJsonRecord(getProductBlobPath(id))
@@ -137,7 +141,7 @@ export async function deleteProduct(id: string) {
 }
 
 export async function updateProduct(id: string, product: Product) {
-  ensureServerStorageAvailable()
+  ensureServerStorageAvailable("write")
 
   if (isBlobStorageEnabled()) {
     await readProducts()

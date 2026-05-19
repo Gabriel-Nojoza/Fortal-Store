@@ -17,11 +17,15 @@ export class StorageConfigurationError extends Error {
 }
 
 export function isBlobStorageEnabled() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN) || process.env.VERCEL === "1"
+  return Boolean(process.env[BLOB_TOKEN_ENV_NAME])
 }
 
-export function ensureServerStorageAvailable() {
-  return
+export function ensureServerStorageAvailable(mode: "read" | "write" = "read") {
+  if (mode === "write" && process.env.VERCEL === "1" && !isBlobStorageEnabled()) {
+    throw new StorageConfigurationError(
+      `Configure ${BLOB_TOKEN_ENV_NAME} para permitir gravacoes na Vercel.`
+    )
+  }
 }
 
 async function readBlobText(pathname: string) {
