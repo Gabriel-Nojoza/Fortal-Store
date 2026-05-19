@@ -1,5 +1,9 @@
 import {
+  BlobAccessError,
   BlobNotFoundError,
+  BlobServiceNotAvailable,
+  BlobStoreNotFoundError,
+  BlobStoreSuspendedError,
   del,
   get,
   head,
@@ -9,6 +13,47 @@ import {
 
 const BLOB_TOKEN_ENV_NAME = "BLOB_READ_WRITE_TOKEN"
 
+export function isVercelRuntime() {
+  return (
+    process.env.VERCEL === "1" ||
+    Boolean(process.env.VERCEL_ENV) ||
+    Boolean(process.env.VERCEL_URL)
+  )
+}
+
+function isBlobEnvironmentAvailable() {
+  return Boolean(process.env[BLOB_TOKEN_ENV_NAME]) || isVercelRuntime()
+}
+
+function isRecoverableBlobReadError(error: unknown) {
+  return (
+    error instanceof BlobStoreNotFoundError ||
+    error instanceof BlobStoreSuspendedError ||
+    error instanceof BlobServiceNotAvailable ||
+    error instanceof BlobAccessError
+  )
+}
+
+function toStorageConfigurationError(error: unknown) {
+  if (
+    error instanceof BlobStoreNotFoundError ||
+    error instanceof BlobStoreSuspendedError ||
+    error instanceof BlobAccessError
+  ) {
+    return new StorageConfigurationError(
+      "Conecte e configure o Vercel Blob para salvar produtos em producao."
+    )
+  }
+
+  if (error instanceof BlobServiceNotAvailable) {
+    return new StorageConfigurationError(
+      "O Vercel Blob esta indisponivel no momento. Tente novamente."
+    )
+  }
+
+  return error
+}
+
 export class StorageConfigurationError extends Error {
   constructor(message: string) {
     super(message)
@@ -17,11 +62,11 @@ export class StorageConfigurationError extends Error {
 }
 
 export function isBlobStorageEnabled() {
-  return Boolean(process.env[BLOB_TOKEN_ENV_NAME])
+  return isBlobEnvironmentAvailable()
 }
 
 export function ensureServerStorageAvailable(mode: "read" | "write" = "read") {
-  if (mode === "write" && process.env.VERCEL === "1" && !isBlobStorageEnabled()) {
+  if (mode === "write" && isVercelRuntime() && !isBlobStorageEnabled()) {
     throw new StorageConfigurationError(
       `Configure ${BLOB_TOKEN_ENV_NAME} para permitir gravacoes na Vercel.`
     )
@@ -48,7 +93,17 @@ export async function readJsonRecord<T>(pathname: string) {
     return null
   }
 
-  const text = await readBlobText(pathname)
+  let text: string | null
+
+  try {
+    text = await readBlobText(pathname)
+  } catch (error) {
+    if (isRecoverableBlobReadError(error)) {
+      return null
+    }
+
+    throw error
+  }
 
   if (!text) {
     return null
@@ -69,15 +124,35 @@ export async function listJsonRecords<T>(prefix: string) {
   let hasMore = false
 
   do {
-    const page = await list({
-      prefix,
-      cursor,
-      limit: 1000,
-    })
+    let page
+
+    try {
+      page = await list({
+        prefix,
+        cursor,
+        limit: 1000,
+      })
+    } catch (error) {
+      if (isRecoverableBlobReadError(error)) {
+        return [] as T[]
+      }
+
+      throw error
+    }
 
     const pageRecords = await Promise.all(
       page.blobs.map(async (blob) => {
-        const text = await readBlobText(blob.pathname)
+        let text: string | null
+
+        try {
+          text = await readBlobText(blob.pathname)
+        } catch (error) {
+          if (isRecoverableBlobReadError(error)) {
+            return null
+          }
+
+          throw error
+        }
 
         if (!text) {
           return null
@@ -114,12 +189,16 @@ export async function putJsonRecord<T>(pathname: string, record: T) {
     return
   }
 
-  await put(pathname, JSON.stringify(record, null, 2), {
-    access: "private",
-    allowOverwrite: true,
-    contentType: "application/json; charset=utf-8",
-    cacheControlMaxAge: 60,
-  })
+  try {
+    await put(pathname, JSON.stringify(record, null, 2), {
+      access: "private",
+      allowOverwrite: true,
+      contentType: "application/json; charset=utf-8",
+      cacheControlMaxAge: 60,
+    })
+  } catch (error) {
+    throw toStorageConfigurationError(error)
+  }
 }
 
 export async function deleteJsonRecord(pathname: string) {
@@ -138,6 +217,6 @@ export async function deleteJsonRecord(pathname: string) {
       return false
     }
 
-    throw error
+    throw toStorageConfigurationError(error)
   }
 }

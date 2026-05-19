@@ -4,6 +4,7 @@ import {
   deleteJsonRecord,
   ensureServerStorageAvailable,
   isBlobStorageEnabled,
+  isVercelRuntime,
   listJsonRecords,
   putJsonRecord,
   readJsonRecord,
@@ -13,41 +14,7 @@ import type { Product } from "@/lib/types"
 const PRODUCTS_FILE = path.join(process.cwd(), "data", "products.json")
 const PRODUCTS_BLOB_PREFIX = "products/"
 
-const initialProducts: Product[] = [
-  {
-    id: "1",
-    name: "Camisa Fortaleza Home 2024",
-    description:
-      "Camisa oficial do Fortaleza Esporte Clube para a temporada 2024. Material de alta qualidade com tecnologia de absorcao de suor.",
-    price: 299.9,
-    imageUrl: "/uploads/fortaleza-home.jpg",
-    sizes: ["P", "M", "G", "GG"],
-    team: "Fortaleza",
-    createdAt: "2024-01-15T10:00:00Z",
-  },
-  {
-    id: "2",
-    name: "Camisa Flamengo Away 2024",
-    description:
-      "Camisa reserva do Flamengo para a temporada 2024. Design exclusivo em branco com detalhes em vermelho e preto.",
-    price: 319.9,
-    imageUrl: "/uploads/flamengo-away.jpg",
-    sizes: ["P", "M", "G", "GG", "XGG"],
-    team: "Flamengo",
-    createdAt: "2024-01-16T10:00:00Z",
-  },
-  {
-    id: "3",
-    name: "Camisa Ceara Titular 2024",
-    description:
-      "Camisa principal do Ceara Sporting Club. Tradicional listrada em preto e branco.",
-    price: 279.9,
-    imageUrl: "/uploads/ceara-home.jpg",
-    sizes: ["M", "G", "GG"],
-    team: "Ceara",
-    createdAt: "2024-01-17T10:00:00Z",
-  },
-]
+const initialProducts: Product[] = []
 
 function getProductBlobPath(id: string) {
   return `${PRODUCTS_BLOB_PREFIX}${id}.json`
@@ -97,11 +64,15 @@ async function readProducts() {
     try {
       const products = await listJsonRecords<Product>(PRODUCTS_BLOB_PREFIX)
 
-      if (products.length > 0) {
+      if (products.length > 0 || isVercelRuntime()) {
         return sortProducts(products)
       }
     } catch (error) {
       console.error("[products] Falling back to file storage:", error)
+
+      if (isVercelRuntime()) {
+        return []
+      }
     }
   }
 
