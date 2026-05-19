@@ -1,6 +1,6 @@
 "use client"
 
-import { Trash2, Package } from "lucide-react"
+import { Pencil, Trash2, Package } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,11 +9,17 @@ import type { Product } from "@/lib/types"
 
 interface ProductListProps {
   products: Product[]
+  onEdit: (product: Product) => void
   onDelete: (id: string) => void
   isDeleting: string | null
 }
 
-export function ProductList({ products, onDelete, isDeleting }: ProductListProps) {
+export function ProductList({
+  products,
+  onEdit,
+  onDelete,
+  isDeleting,
+}: ProductListProps) {
   if (products.length === 0) {
     return (
       <Card className="border-border bg-card">
@@ -84,19 +90,31 @@ export function ProductList({ products, onDelete, isDeleting }: ProductListProps
                   ))}
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onDelete(product.id)}
-                disabled={isDeleting === product.id}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              >
-                {isDeleting === product.id ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-destructive border-t-transparent" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onEdit(product)}
+                  className="text-primary hover:bg-primary/10 hover:text-primary"
+                  aria-label={`Editar ${product.name}`}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onDelete(product.id)}
+                  disabled={isDeleting === product.id}
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`Excluir ${product.name}`}
+                >
+                  {isDeleting === product.id ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-destructive border-t-transparent" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
           ))}
         </div>

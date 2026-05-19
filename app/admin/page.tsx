@@ -15,12 +15,13 @@ import { useOrderNotes } from "@/hooks/use-order-notes"
 import { useOrders } from "@/hooks/use-orders"
 import { useProducts } from "@/hooks/use-products"
 import { toast } from "@/hooks/use-toast"
-import type { Order } from "@/lib/types"
+import type { Order, Product } from "@/lib/types"
 
 function AdminDashboard() {
   const { isAuthenticated, logout } = useAuth()
   const { products, isLoading, deleteProduct, refreshProducts } = useProducts()
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
 
   const handleNewOrders = useCallback((incomingOrders: Order[]) => {
     const latestOrder = incomingOrders[0]
@@ -61,6 +62,9 @@ function AdminDashboard() {
     try {
       setIsDeleting(id)
       await deleteProduct(id)
+      setEditingProduct((currentProduct) =>
+        currentProduct?.id === id ? null : currentProduct
+      )
     } catch (error) {
       console.error("Erro ao excluir produto:", error)
       alert(
@@ -133,7 +137,11 @@ function AdminDashboard() {
         <PushNotificationSettings />
 
         <div className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
-          <ProductForm onSuccess={() => void refreshProducts()} />
+          <ProductForm
+            onSuccess={() => void refreshProducts()}
+            productToEdit={editingProduct}
+            onCancelEdit={() => setEditingProduct(null)}
+          />
 
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
@@ -142,6 +150,7 @@ function AdminDashboard() {
           ) : (
             <ProductList
               products={products}
+              onEdit={(product) => setEditingProduct(product)}
               onDelete={(id) => void handleDelete(id)}
               isDeleting={isDeleting}
             />

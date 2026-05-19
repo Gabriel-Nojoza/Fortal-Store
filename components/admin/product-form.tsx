@@ -1,43 +1,106 @@
 "use client"
 
-import { useState } from "react"
-import { Upload, X, Plus, Loader2 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Upload, X, Plus, Loader2, PencilLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import type { Product } from "@/lib/types"
 
-const AVAILABLE_SIZES = ["PP", "P", "M", "G", "GG", "XGG"]
+const ADULT_SIZES = ["PP", "P", "M", "G", "GG", "XGG"]
+const KIDS_SIZES = [
+  "2 anos",
+  "3 anos",
+  "4 anos",
+  "5 anos",
+  "6 anos",
+  "7 anos",
+  "8 anos",
+  "9 anos",
+  "10 anos",
+  "11 anos",
+  "12 anos",
+]
 
-interface ProductData {
+type SizeProfile = "adult" | "kids"
+
+interface ProductFormState {
   name: string
   description: string
-  price: number
-  imageUrl: string
-  sizes: string[]
+  price: string
   team: string
 }
 
 interface ProductFormProps {
   onSuccess: () => void
+  productToEdit?: Product | null
+  onCancelEdit?: () => void
 }
 
-export function ProductForm({ onSuccess }: ProductFormProps) {
+const emptyFormState: ProductFormState = {
+  name: "",
+  team: "",
+  price: "",
+  description: "",
+}
+
+function inferSizeProfile(sizes: string[]): SizeProfile {
+  return sizes.length > 0 && sizes.every((size) => KIDS_SIZES.includes(size))
+    ? "kids"
+    : "adult"
+}
+
+export function ProductForm({
+  onSuccess,
+  productToEdit = null,
+  onCancelEdit,
+}: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [selectedSizes, setSelectedSizes] = useState<string[]>([])
-  const [formData, setFormData] = useState({
-    name: "",
-    team: "",
-    price: "",
-    description: "",
-  })
+  const [sizeProfile, setSizeProfile] = useState<SizeProfile>("adult")
+  const [formData, setFormData] = useState<ProductFormState>(emptyFormState)
+
+  const isEditing = Boolean(productToEdit)
+  const availableSizes = sizeProfile === "kids" ? KIDS_SIZES : ADULT_SIZES
+
+  useEffect(() => {
+    if (!productToEdit) {
+      setFormData(emptyFormState)
+      setSelectedSizes([])
+      setSizeProfile("adult")
+      setImagePreview(null)
+      setImageFile(null)
+      return
+    }
+
+    setFormData({
+      name: productToEdit.name,
+      team: productToEdit.team,
+      price: String(productToEdit.price),
+      description: productToEdit.description,
+    })
+    setSizeProfile(inferSizeProfile(productToEdit.sizes))
+    setSelectedSizes(productToEdit.sizes)
+    setImagePreview(productToEdit.imageUrl)
+    setImageFile(null)
+  }, [productToEdit])
+
+  const resetForm = () => {
+    setFormData(emptyFormState)
+    setSelectedSizes([])
+    setSizeProfile("adult")
+    setImagePreview(null)
+    setImageFile(null)
+  }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+
     if (file) {
       setImageFile(file)
       const reader = new FileReader()
@@ -51,15 +114,28 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
   const toggleSize = (size: string) => {
     setSelectedSizes((prev) =>
       prev.includes(size)
-        ? prev.filter((s) => s !== size)
+        ? prev.filter((selectedSize) => selectedSize !== size)
         : [...prev, size]
     )
+  }
+
+  const handleSizeProfileChange = (nextProfile: SizeProfile) => {
+    setSizeProfile(nextProfile)
+    const validSizes = nextProfile === "kids" ? KIDS_SIZES : ADULT_SIZES
+    setSelectedSizes((currentSizes) =>
+      currentSizes.filter((size) => validSizes.includes(size))
+    )
+  }
+
+  const handleCancelEdit = () => {
+    resetForm()
+    onCancelEdit?.()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!imageFile || selectedSizes.length === 0) {
+    if (!imagePreview || selectedSizes.length === 0) {
       alert("Por favor, adicione uma imagem e selecione pelo menos um tamanho.")
       return
     }
@@ -67,48 +143,57 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
     setIsSubmitting(true)
 
     try {
-      // Upload image first
-      const imageFormData = new FormData()
-      imageFormData.append("file", imageFile)
+      let imageUrl = imagePreview
 
-      const uploadResponse = await fetch("/api/upload", {
-        method: "POST",
-        body: imageFormData,
-      })
+      if (imageFile) {
+        const imageFormData = new FormData()
+        imageFormData.append("file", imageFile)
 
-      if (!uploadResponse.ok) {
-        const payload = await uploadResponse.json().catch(() => null)
-        throw new Error(payload?.error || "Erro ao fazer upload da imagem")
+        const uploadResponse = await fetch("/api/upload", {
+          method: "POST",
+          body: imageFormData,
+        })
+
+        if (!uploadResponse.ok) {
+          const payload = await uploadResponse.json().catch(() => null)
+          throw new Error(payload?.error || "Erro ao fazer upload da imagem")
+        }
+
+        const uploadPayload = await uploadResponse.json()
+        imageUrl = uploadPayload.imageUrl
       }
 
-      const { imageUrl } = await uploadResponse.json()
+      const productPayload = {
+        name: formData.name,
+        team: formData.team,
+        price: parseFloat(formData.price),
+        description: formData.description,
+        sizes: selectedSizes,
+        imageUrl,
+      }
 
-      // Create product
-      const productResponse = await fetch("/api/products", {
-        method: "POST",
+      const endpoint = isEditing
+        ? `/api/products/${productToEdit?.id}`
+        : "/api/products"
+
+      const productResponse = await fetch(endpoint, {
+        method: isEditing ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name: formData.name,
-          team: formData.team,
-          price: parseFloat(formData.price),
-          description: formData.description,
-          sizes: selectedSizes,
-          imageUrl,
-        }),
+        body: JSON.stringify(productPayload),
       })
 
       if (!productResponse.ok) {
         const payload = await productResponse.json().catch(() => null)
-        throw new Error(payload?.error || "Erro ao criar produto")
+        throw new Error(
+          payload?.error ||
+            (isEditing ? "Erro ao atualizar produto" : "Erro ao criar produto")
+        )
       }
 
-      // Reset form
-      setFormData({ name: "", team: "", price: "", description: "" })
-      setSelectedSizes([])
-      setImagePreview(null)
-      setImageFile(null)
+      resetForm()
+      onCancelEdit?.()
       onSuccess()
     } catch (error) {
       console.error("Error:", error)
@@ -126,13 +211,23 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
     <Card className="border-border bg-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-foreground">
-          <Plus className="h-5 w-5 text-primary" />
-          Adicionar Novo Produto
+          {isEditing ? (
+            <PencilLine className="h-5 w-5 text-primary" />
+          ) : (
+            <Plus className="h-5 w-5 text-primary" />
+          )}
+          {isEditing ? "Editar Produto" : "Adicionar Novo Produto"}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Image Upload */}
+          {isEditing ? (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+              Ajuste os dados do produto e salve novamente. A imagem atual sera
+              mantida se voce nao escolher outra.
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <Label className="text-foreground">Imagem do Produto</Label>
             <div className="flex gap-4">
@@ -155,12 +250,12 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
                   </button>
                 </div>
               ) : (
-                <label 
+                <label
                   htmlFor="image-upload"
                   className="flex h-40 w-40 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-secondary transition-colors hover:border-primary/50"
                 >
                   <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-center text-xs text-muted-foreground">
                     Clique para enviar
                   </span>
                 </label>
@@ -175,7 +270,6 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
             </div>
           </div>
 
-          {/* Name and Team */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="name" className="text-foreground">
@@ -184,7 +278,9 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
               <Input
                 id="name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
                 placeholder="Ex: Camisa Fortaleza Home 2024"
                 className="bg-input"
                 required
@@ -197,7 +293,9 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
               <Input
                 id="team"
                 value={formData.team}
-                onChange={(e) => setFormData({ ...formData, team: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, team: e.target.value })
+                }
                 placeholder="Ex: Fortaleza"
                 className="bg-input"
                 required
@@ -205,10 +303,9 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
             </div>
           </div>
 
-          {/* Price */}
           <div className="space-y-2">
             <Label htmlFor="price" className="text-foreground">
-              Preço (R$)
+              Preco (R$)
             </Label>
             <Input
               id="price"
@@ -216,33 +313,69 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
               step="0.01"
               min="0"
               value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, price: e.target.value })
+              }
               placeholder="299.90"
               className="bg-input"
               required
             />
           </div>
 
-          {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description" className="text-foreground">
-              Descrição
+              Descricao
             </Label>
             <Textarea
               id="description"
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
               placeholder="Descreva o produto..."
               className="min-h-24 bg-input"
               required
             />
           </div>
 
-          {/* Sizes */}
-          <div className="space-y-2">
-            <Label className="text-foreground">Tamanhos Disponíveis</Label>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label className="text-foreground">Grade de Tamanhos</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={sizeProfile === "adult" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleSizeProfileChange("adult")}
+                >
+                  Adulto
+                </Button>
+                <Button
+                  type="button"
+                  variant={sizeProfile === "kids" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleSizeProfileChange("kids")}
+                >
+                  Infantil
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-foreground">
+                {sizeProfile === "kids"
+                  ? "Tamanhos Infantis"
+                  : "Tamanhos Disponiveis"}
+              </Label>
+              {sizeProfile === "kids" ? (
+                <p className="text-xs text-muted-foreground">
+                  Selecione os tamanhos de 2 a 12 anos disponiveis para esse
+                  modelo.
+                </p>
+              ) : null}
+            </div>
             <div className="flex flex-wrap gap-2">
-              {AVAILABLE_SIZES.map((size) => (
+              {availableSizes.map((size) => (
                 <Badge
                   key={size}
                   variant={selectedSizes.includes(size) ? "default" : "outline"}
@@ -259,23 +392,42 @@ export function ProductForm({ onSuccess }: ProductFormProps) {
             </div>
           </div>
 
-          <Button
-            type="submit"
-            className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Salvando...
-              </>
-            ) : (
-              <>
-                <Plus className="mr-2 h-4 w-4" />
-                Adicionar Produto
-              </>
-            )}
-          </Button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button
+              type="submit"
+              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : isEditing ? (
+                <>
+                  <PencilLine className="mr-2 h-4 w-4" />
+                  Salvar Alteracoes
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar Produto
+                </>
+              )}
+            </Button>
+
+            {isEditing ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleCancelEdit}
+                disabled={isSubmitting}
+              >
+                Cancelar Edicao
+              </Button>
+            ) : null}
+          </div>
         </form>
       </CardContent>
     </Card>
