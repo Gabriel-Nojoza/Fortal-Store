@@ -2,19 +2,60 @@ import { randomUUID } from "crypto"
 import { promises as fs } from "fs"
 import path from "path"
 import {
-  ensureServerStorageAvailable,
-  isBlobStorageEnabled,
-  listJsonRecords,
-  putJsonRecord,
-  readJsonRecord,
-} from "@/lib/blob-json-store"
-import type { Order, OrderStatus } from "@/lib/types"
+  ensureSupabaseAvailable,
+  insertRow,
+  selectRows,
+  shouldUseSupabaseStorage,
+  updateRows,
+} from "@/lib/supabase-rest"
+import type { CartItem, Order, OrderStatus } from "@/lib/types"
 
 const ORDERS_FILE = path.join(process.cwd(), "data", "orders.json")
-const ORDERS_BLOB_PREFIX = "orders/"
 
-function getOrderBlobPath(id: string) {
-  return `${ORDERS_BLOB_PREFIX}${id}.json`
+interface OrderRow {
+  id: string
+  customer: Order["customer"]
+  payment_method: Order["paymentMethod"]
+  delivery_method: Order["deliveryMethod"]
+  address: Order["address"]
+  notes: string
+  items: CartItem[]
+  total_items: number
+  total_price: number | string
+  status: OrderStatus
+  created_at: string
+}
+
+function mapOrderRowToOrder(row: OrderRow): Order {
+  return {
+    id: row.id,
+    customer: row.customer,
+    paymentMethod: row.payment_method,
+    deliveryMethod: row.delivery_method,
+    address: row.address,
+    notes: row.notes,
+    items: Array.isArray(row.items) ? row.items : [],
+    totalItems: row.total_items,
+    totalPrice: Number(row.total_price),
+    status: row.status,
+    createdAt: row.created_at,
+  }
+}
+
+function mapOrderToRow(order: Order): OrderRow {
+  return {
+    id: order.id,
+    customer: order.customer,
+    payment_method: order.paymentMethod,
+    delivery_method: order.deliveryMethod,
+    address: order.address,
+    notes: order.notes,
+    items: order.items,
+    total_items: order.totalItems,
+    total_price: order.totalPrice,
+    status: order.status,
+    created_at: order.createdAt,
+  }
 }
 
 async function writeOrdersToFile(orders: Order[]) {
@@ -47,11 +88,22 @@ function sortOrdersByDate(orders: Order[]) {
   )
 }
 
-async function readOrders() {
-  ensureServerStorageAvailable()
+async function readOrdersFromSupabase() {
+  ensureSupabaseAvailable()
 
-  if (isBlobStorageEnabled()) {
-    return listJsonRecords<Order>(ORDERS_BLOB_PREFIX)
+  const rows = await selectRows<OrderRow>("orders", {
+    orderBy: {
+      column: "created_at",
+      ascending: false,
+    },
+  })
+
+  return rows.map(mapOrderRowToOrder)
+}
+
+async function readOrders() {
+  if (shouldUseSupabaseStorage()) {
+    return readOrdersFromSupabase()
   }
 
   return readOrdersFromFile()
@@ -63,17 +115,17 @@ export async function getOrders() {
 }
 
 export async function createOrder(orderData: Omit<Order, "id" | "createdAt">) {
-  ensureServerStorageAvailable()
-
   const newOrder: Order = {
     ...orderData,
     id: `PED-${randomUUID().split("-")[0].toUpperCase()}`,
     createdAt: new Date().toISOString(),
   }
 
-  if (isBlobStorageEnabled()) {
-    await putJsonRecord(getOrderBlobPath(newOrder.id), newOrder)
-    return newOrder
+  if (shouldUseSupabaseStorage()) {
+    ensureSupabaseAvailable("write")
+
+    const createdRow = await insertRow<OrderRow>("orders", mapOrderToRow(newOrder))
+    return createdRow ? mapOrderRowToOrder(createdRow) : newOrder
   }
 
   const orders = await readOrdersFromFile()
@@ -84,22 +136,23 @@ export async function createOrder(orderData: Omit<Order, "id" | "createdAt">) {
 }
 
 export async function updateOrderStatus(id: string, status: OrderStatus) {
-  ensureServerStorageAvailable()
+  if (shouldUseSupabaseStorage()) {
+    ensureSupabaseAvailable("write")
 
-  if (isBlobStorageEnabled()) {
-    const currentOrder = await readJsonRecord<Order>(getOrderBlobPath(id))
+    const updatedRows = await updateRows<OrderRow>(
+      "orders",
+      {
+        status,
+      },
+      [
+        {
+          column: "id",
+          value: id,
+        },
+      ]
+    )
 
-    if (!currentOrder) {
-      return null
-    }
-
-    const updatedOrder: Order = {
-      ...currentOrder,
-      status,
-    }
-
-    await putJsonRecord(getOrderBlobPath(id), updatedOrder)
-    return updatedOrder
+    return updatedRows[0] ? mapOrderRowToOrder(updatedRows[0]) : null
   }
 
   const orders = await readOrdersFromFile()

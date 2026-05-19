@@ -1,23 +1,28 @@
 import { promises as fs } from "fs"
 import path from "path"
 import {
-  deleteJsonRecord,
-  ensureServerStorageAvailable,
-  isBlobStorageEnabled,
-  isVercelRuntime,
-  listJsonRecords,
-  putJsonRecord,
-  readJsonRecord,
-} from "@/lib/blob-json-store"
+  deleteRows,
+  ensureSupabaseAvailable,
+  insertRow,
+  selectRows,
+  shouldUseSupabaseStorage,
+  updateRows,
+} from "@/lib/supabase-rest"
 import type { Product } from "@/lib/types"
 
 const PRODUCTS_FILE = path.join(process.cwd(), "data", "products.json")
-const PRODUCTS_BLOB_PREFIX = "products/"
 
 const initialProducts: Product[] = []
 
-function getProductBlobPath(id: string) {
-  return `${PRODUCTS_BLOB_PREFIX}${id}.json`
+interface ProductRow {
+  id: string
+  name: string
+  team: string
+  price: number | string
+  description: string
+  sizes: string[]
+  image_url: string
+  created_at: string
 }
 
 function sortProducts(products: Product[]) {
@@ -25,6 +30,32 @@ function sortProducts(products: Product[]) {
     (left, right) =>
       new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
   )
+}
+
+function mapProductRowToProduct(row: ProductRow): Product {
+  return {
+    id: row.id,
+    name: row.name,
+    team: row.team,
+    price: Number(row.price),
+    description: row.description,
+    sizes: Array.isArray(row.sizes) ? row.sizes : [],
+    imageUrl: row.image_url,
+    createdAt: row.created_at,
+  }
+}
+
+function mapProductToRow(product: Product): ProductRow {
+  return {
+    id: product.id,
+    name: product.name,
+    team: product.team,
+    price: product.price,
+    description: product.description,
+    sizes: product.sizes,
+    image_url: product.imageUrl,
+    created_at: product.createdAt,
+  }
 }
 
 async function writeProductsToFile(products: Product[]) {
@@ -47,8 +78,9 @@ async function readProductsFromFile() {
       try {
         await writeProductsToFile(initialProducts)
       } catch {
-        // Read-only environments such as Vercel can still serve the fallback data.
+        // Ignore local write failures during development bootstrap.
       }
+
       return sortProducts(initialProducts)
     }
 
@@ -57,23 +89,22 @@ async function readProductsFromFile() {
   }
 }
 
+async function readProductsFromSupabase() {
+  ensureSupabaseAvailable()
+
+  const rows = await selectRows<ProductRow>("products", {
+    orderBy: {
+      column: "created_at",
+      ascending: false,
+    },
+  })
+
+  return rows.map(mapProductRowToProduct)
+}
+
 async function readProducts() {
-  ensureServerStorageAvailable()
-
-  if (isBlobStorageEnabled()) {
-    try {
-      const products = await listJsonRecords<Product>(PRODUCTS_BLOB_PREFIX)
-
-      if (products.length > 0 || isVercelRuntime()) {
-        return sortProducts(products)
-      }
-    } catch (error) {
-      console.error("[products] Falling back to file storage:", error)
-
-      if (isVercelRuntime()) {
-        return []
-      }
-    }
+  if (shouldUseSupabaseStorage()) {
+    return readProductsFromSupabase()
   }
 
   return readProductsFromFile()
@@ -84,15 +115,28 @@ export async function getProducts() {
 }
 
 export async function getProduct(id: string) {
-  const products = await readProducts()
+  if (shouldUseSupabaseStorage()) {
+    const rows = await selectRows<ProductRow>("products", {
+      filters: [
+        {
+          column: "id",
+          value: id,
+        },
+      ],
+      limit: 1,
+    })
+
+    return rows[0] ? mapProductRowToProduct(rows[0]) : undefined
+  }
+
+  const products = await readProductsFromFile()
   return products.find((product) => product.id === id)
 }
 
 export async function addProduct(product: Product) {
-  ensureServerStorageAvailable("write")
-
-  if (isBlobStorageEnabled()) {
-    await putJsonRecord(getProductBlobPath(product.id), product)
+  if (shouldUseSupabaseStorage()) {
+    ensureSupabaseAvailable("write")
+    await insertRow<ProductRow>("products", mapProductToRow(product))
     return
   }
 
@@ -102,10 +146,17 @@ export async function addProduct(product: Product) {
 }
 
 export async function deleteProduct(id: string) {
-  ensureServerStorageAvailable("write")
+  if (shouldUseSupabaseStorage()) {
+    ensureSupabaseAvailable("write")
 
-  if (isBlobStorageEnabled()) {
-    return deleteJsonRecord(getProductBlobPath(id))
+    const deletedRows = await deleteRows<ProductRow>("products", [
+      {
+        column: "id",
+        value: id,
+      },
+    ])
+
+    return deletedRows.length > 0
   }
 
   const products = await readProductsFromFile()
@@ -120,18 +171,21 @@ export async function deleteProduct(id: string) {
 }
 
 export async function updateProduct(id: string, product: Product) {
-  ensureServerStorageAvailable("write")
+  if (shouldUseSupabaseStorage()) {
+    ensureSupabaseAvailable("write")
 
-  if (isBlobStorageEnabled()) {
-    await readProducts()
-    const currentProduct = await readJsonRecord<Product>(getProductBlobPath(id))
+    const updatedRows = await updateRows<ProductRow>(
+      "products",
+      mapProductToRow(product),
+      [
+        {
+          column: "id",
+          value: id,
+        },
+      ]
+    )
 
-    if (!currentProduct) {
-      return false
-    }
-
-    await putJsonRecord(getProductBlobPath(id), product)
-    return true
+    return updatedRows.length > 0
   }
 
   const products = await readProductsFromFile()

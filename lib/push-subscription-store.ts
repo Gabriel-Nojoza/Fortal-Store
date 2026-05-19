@@ -1,14 +1,13 @@
-import { createHash, randomUUID } from "crypto"
+import { randomUUID } from "crypto"
 import { promises as fs } from "fs"
 import path from "path"
 import {
-  deleteJsonRecord,
-  ensureServerStorageAvailable,
-  isBlobStorageEnabled,
-  listJsonRecords,
-  putJsonRecord,
-  readJsonRecord,
-} from "@/lib/blob-json-store"
+  deleteRows,
+  ensureSupabaseAvailable,
+  selectRows,
+  shouldUseSupabaseStorage,
+  upsertRow,
+} from "@/lib/supabase-rest"
 import type { PushSubscriptionRecord, StoredPushSubscription } from "@/lib/types"
 
 const PUSH_SUBSCRIPTIONS_FILE = path.join(
@@ -16,11 +15,15 @@ const PUSH_SUBSCRIPTIONS_FILE = path.join(
   "data",
   "push-subscriptions.json"
 )
-const PUSH_SUBSCRIPTIONS_BLOB_PREFIX = "push-subscriptions/"
 
-function getSubscriptionBlobPath(endpoint: string) {
-  const hash = createHash("sha256").update(endpoint).digest("hex")
-  return `${PUSH_SUBSCRIPTIONS_BLOB_PREFIX}${hash}.json`
+interface PushSubscriptionRow {
+  id: string
+  endpoint: string
+  subscription: StoredPushSubscription
+  device_name: string
+  user_agent: string
+  created_at: string
+  updated_at: string
 }
 
 function sortPushSubscriptions(records: PushSubscriptionRecord[]) {
@@ -28,6 +31,19 @@ function sortPushSubscriptions(records: PushSubscriptionRecord[]) {
     (left, right) =>
       new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
   )
+}
+
+function mapPushSubscriptionRowToRecord(
+  row: PushSubscriptionRow
+): PushSubscriptionRecord {
+  return {
+    id: row.id,
+    subscription: row.subscription,
+    deviceName: row.device_name,
+    userAgent: row.user_agent,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
 }
 
 async function writePushSubscriptionsToFile(records: PushSubscriptionRecord[]) {
@@ -59,15 +75,22 @@ async function readPushSubscriptionsFromFile() {
   }
 }
 
+async function readPushSubscriptionsFromSupabase() {
+  ensureSupabaseAvailable()
+
+  const rows = await selectRows<PushSubscriptionRow>("push_subscriptions", {
+    orderBy: {
+      column: "updated_at",
+      ascending: false,
+    },
+  })
+
+  return rows.map(mapPushSubscriptionRowToRecord)
+}
+
 async function readPushSubscriptions() {
-  ensureServerStorageAvailable()
-
-  if (isBlobStorageEnabled()) {
-    const records = await listJsonRecords<PushSubscriptionRecord>(
-      PUSH_SUBSCRIPTIONS_BLOB_PREFIX
-    )
-
-    return sortPushSubscriptions(records)
+  if (shouldUseSupabaseStorage()) {
+    return readPushSubscriptionsFromSupabase()
   }
 
   return readPushSubscriptionsFromFile()
@@ -82,33 +105,40 @@ export async function savePushSubscription(input: {
   deviceName: string
   userAgent: string
 }) {
-  ensureServerStorageAvailable()
-
   const now = new Date().toISOString()
 
-  if (isBlobStorageEnabled()) {
-    const pathname = getSubscriptionBlobPath(input.subscription.endpoint)
-    const existingRecord = await readJsonRecord<PushSubscriptionRecord>(pathname)
+  if (shouldUseSupabaseStorage()) {
+    ensureSupabaseAvailable("write")
 
-    const record: PushSubscriptionRecord = existingRecord
-      ? {
-          ...existingRecord,
-          subscription: input.subscription,
-          deviceName: input.deviceName,
-          userAgent: input.userAgent,
-          updatedAt: now,
-        }
-      : {
-          id: randomUUID(),
-          subscription: input.subscription,
-          deviceName: input.deviceName,
-          userAgent: input.userAgent,
-          createdAt: now,
-          updatedAt: now,
-        }
+    const existingRows = await selectRows<PushSubscriptionRow>(
+      "push_subscriptions",
+      {
+        filters: [
+          {
+            column: "endpoint",
+            value: input.subscription.endpoint,
+          },
+        ],
+        limit: 1,
+      }
+    )
 
-    await putJsonRecord(pathname, record)
-    return record
+    const existingRow = existingRows[0]
+    const savedRow = await upsertRow<PushSubscriptionRow>(
+      "push_subscriptions",
+      {
+        id: existingRow?.id || randomUUID(),
+        endpoint: input.subscription.endpoint,
+        subscription: input.subscription,
+        device_name: input.deviceName,
+        user_agent: input.userAgent,
+        created_at: existingRow?.created_at || now,
+        updated_at: now,
+      },
+      "endpoint"
+    )
+
+    return savedRow ? mapPushSubscriptionRowToRecord(savedRow) : null
   }
 
   const records = await readPushSubscriptionsFromFile()
@@ -144,10 +174,20 @@ export async function savePushSubscription(input: {
 }
 
 export async function removePushSubscription(endpoint: string) {
-  ensureServerStorageAvailable()
+  if (shouldUseSupabaseStorage()) {
+    ensureSupabaseAvailable("write")
 
-  if (isBlobStorageEnabled()) {
-    return deleteJsonRecord(getSubscriptionBlobPath(endpoint))
+    const deletedRows = await deleteRows<PushSubscriptionRow>(
+      "push_subscriptions",
+      [
+        {
+          column: "endpoint",
+          value: endpoint,
+        },
+      ]
+    )
+
+    return deletedRows.length > 0
   }
 
   const records = await readPushSubscriptionsFromFile()
