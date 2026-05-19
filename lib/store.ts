@@ -85,7 +85,8 @@ async function readProductsFromFile() {
       return sortProducts(initialProducts)
     }
 
-    throw error
+    console.error("[products] Falling back to bundled defaults:", error)
+    return sortProducts(initialProducts)
   }
 }
 
@@ -93,8 +94,15 @@ async function readProducts() {
   ensureServerStorageAvailable()
 
   if (isBlobStorageEnabled()) {
-    const products = await listJsonRecords<Product>(PRODUCTS_BLOB_PREFIX)
-    return sortProducts(products)
+    try {
+      const products = await listJsonRecords<Product>(PRODUCTS_BLOB_PREFIX)
+
+      if (products.length > 0) {
+        return sortProducts(products)
+      }
+    } catch (error) {
+      console.error("[products] Falling back to file storage:", error)
+    }
   }
 
   return readProductsFromFile()
