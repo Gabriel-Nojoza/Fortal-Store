@@ -12,8 +12,18 @@ function normalizeProductPayload(body: Record<string, unknown>) {
   const price = Number(body.price)
   const sizes = Array.isArray(body.sizes)
     ? body.sizes
-        .map((size) => String(size).trim())
-        .filter(Boolean)
+        .filter(
+          (item): item is { size: string; quantity: number } =>
+            item !== null &&
+            typeof item === "object" &&
+            typeof (item as Record<string, unknown>).size === "string" &&
+            typeof (item as Record<string, unknown>).quantity === "number"
+        )
+        .map((item) => ({
+          size: String(item.size).trim(),
+          quantity: Math.max(0, Math.floor(item.quantity)),
+        }))
+        .filter((item) => item.size)
     : []
 
   if (!name || !team || !description || !imageUrl) {

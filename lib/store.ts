@@ -8,7 +8,7 @@ import {
   shouldUseSupabaseStorage,
   updateRows,
 } from "@/lib/supabase-rest"
-import type { Product } from "@/lib/types"
+import type { Product, SizeStock } from "@/lib/types"
 
 const PRODUCTS_FILE = path.join(process.cwd(), "data", "products.json")
 
@@ -20,9 +20,17 @@ interface ProductRow {
   team: string
   price: number | string
   description: string
-  sizes: string[]
+  sizes: (SizeStock | string)[]
   image_url: string
   created_at: string
+}
+
+function normalizeSizes(raw: (SizeStock | string)[]): SizeStock[] {
+  if (!Array.isArray(raw) || raw.length === 0) return []
+  if (typeof raw[0] === "object" && raw[0] !== null && "size" in raw[0]) {
+    return raw as SizeStock[]
+  }
+  return (raw as string[]).map((size) => ({ size, quantity: 0 }))
 }
 
 function sortProducts(products: Product[]) {
@@ -39,7 +47,7 @@ function mapProductRowToProduct(row: ProductRow): Product {
     team: row.team,
     price: Number(row.price),
     description: row.description,
-    sizes: Array.isArray(row.sizes) ? row.sizes : [],
+    sizes: normalizeSizes(row.sizes),
     imageUrl: row.image_url,
     createdAt: row.created_at,
   }
@@ -168,6 +176,26 @@ export async function deleteProduct(id: string) {
 
   await writeProductsToFile(nextProducts)
   return true
+}
+
+export async function deductStock(
+  productId: string,
+  size: string,
+  quantity: number
+) {
+  const product = await getProduct(productId)
+  if (!product) return
+
+  const idx = product.sizes.findIndex((s) => s.size === size)
+  if (idx === -1) return
+
+  const updatedSizes = [...product.sizes]
+  updatedSizes[idx] = {
+    ...updatedSizes[idx],
+    quantity: Math.max(0, updatedSizes[idx].quantity - quantity),
+  }
+
+  await updateProduct(productId, { ...product, sizes: updatedSizes })
 }
 
 export async function updateProduct(id: string, product: Product) {

@@ -14,11 +14,17 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onAddToCart }: ProductCardProps) {
-  const availableSizes = useMemo(
-    () => (product.sizes.length > 0 ? product.sizes : ["Unico"]),
+  const sizeOptions = useMemo(
+    () =>
+      product.sizes.length > 0
+        ? product.sizes
+        : [{ size: "Unico", quantity: 1 }],
     [product.sizes]
   )
-  const [selectedSize, setSelectedSize] = useState(availableSizes[0])
+  const firstInStock = sizeOptions.find((s) => s.quantity > 0)
+  const [selectedSize, setSelectedSize] = useState(
+    firstInStock?.size ?? sizeOptions[0]?.size ?? "Unico"
+  )
 
   return (
     <Card className="group overflow-hidden border-border bg-card transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
@@ -63,18 +69,22 @@ export function ProductCard({ product, onAddToCart }: ProductCardProps) {
             Escolha o tamanho
           </p>
           <div className="flex flex-wrap gap-2">
-            {availableSizes.map((size) => {
+            {sizeOptions.map(({ size, quantity }) => {
               const isSelected = size === selectedSize
+              const isOutOfStock = quantity === 0
 
               return (
                 <button
                   key={size}
                   type="button"
-                  onClick={() => setSelectedSize(size)}
+                  disabled={isOutOfStock}
+                  onClick={() => !isOutOfStock && setSelectedSize(size)}
                   className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                    isSelected
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-secondary text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                    isOutOfStock
+                      ? "cursor-not-allowed border-border/40 bg-secondary/50 text-muted-foreground/40 line-through"
+                      : isSelected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-secondary text-muted-foreground hover:border-primary/50 hover:text-foreground"
                   }`}
                 >
                   {size}
@@ -86,10 +96,13 @@ export function ProductCard({ product, onAddToCart }: ProductCardProps) {
 
         <Button
           className="mt-4 w-full"
+          disabled={sizeOptions.find((s) => s.size === selectedSize)?.quantity === 0}
           onClick={() => onAddToCart?.(product, selectedSize)}
         >
           <ShoppingCart className="h-4 w-4" />
-          Adicionar ao carrinho
+          {sizeOptions.find((s) => s.size === selectedSize)?.quantity === 0
+            ? "Esgotado"
+            : "Adicionar ao carrinho"}
         </Button>
       </CardContent>
     </Card>

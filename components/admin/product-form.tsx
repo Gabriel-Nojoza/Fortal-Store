@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import type { Product } from "@/lib/types"
+import type { Product, SizeStock } from "@/lib/types"
 
 const ADULT_SIZES = ["PP", "P", "M", "G", "GG", "XGG"]
 const KIDS_SIZES = [
@@ -47,8 +47,8 @@ const emptyFormState: ProductFormState = {
   description: "",
 }
 
-function inferSizeProfile(sizes: string[]): SizeProfile {
-  return sizes.length > 0 && sizes.every((size) => KIDS_SIZES.includes(size))
+function inferSizeProfile(sizes: SizeStock[]): SizeProfile {
+  return sizes.length > 0 && sizes.every(({ size }) => KIDS_SIZES.includes(size))
     ? "kids"
     : "adult"
 }
@@ -61,17 +61,18 @@ export function ProductForm({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([])
+  const [sizeStocks, setSizeStocks] = useState<SizeStock[]>([])
   const [sizeProfile, setSizeProfile] = useState<SizeProfile>("adult")
   const [formData, setFormData] = useState<ProductFormState>(emptyFormState)
 
   const isEditing = Boolean(productToEdit)
   const availableSizes = sizeProfile === "kids" ? KIDS_SIZES : ADULT_SIZES
+  const selectedSizeNames = new Set(sizeStocks.map((s) => s.size))
 
   useEffect(() => {
     if (!productToEdit) {
       setFormData(emptyFormState)
-      setSelectedSizes([])
+      setSizeStocks([])
       setSizeProfile("adult")
       setImagePreview(null)
       setImageFile(null)
@@ -85,14 +86,14 @@ export function ProductForm({
       description: productToEdit.description,
     })
     setSizeProfile(inferSizeProfile(productToEdit.sizes))
-    setSelectedSizes(productToEdit.sizes)
+    setSizeStocks(productToEdit.sizes)
     setImagePreview(productToEdit.imageUrl)
     setImageFile(null)
   }, [productToEdit])
 
   const resetForm = () => {
     setFormData(emptyFormState)
-    setSelectedSizes([])
+    setSizeStocks([])
     setSizeProfile("adult")
     setImagePreview(null)
     setImageFile(null)
@@ -112,19 +113,25 @@ export function ProductForm({
   }
 
   const toggleSize = (size: string) => {
-    setSelectedSizes((prev) =>
-      prev.includes(size)
-        ? prev.filter((selectedSize) => selectedSize !== size)
-        : [...prev, size]
+    setSizeStocks((prev) => {
+      if (prev.some((s) => s.size === size)) {
+        return prev.filter((s) => s.size !== size)
+      }
+      return [...prev, { size, quantity: 0 }]
+    })
+  }
+
+  const updateQuantity = (size: string, value: string) => {
+    const quantity = Math.max(0, parseInt(value, 10) || 0)
+    setSizeStocks((prev) =>
+      prev.map((s) => (s.size === size ? { ...s, quantity } : s))
     )
   }
 
   const handleSizeProfileChange = (nextProfile: SizeProfile) => {
     setSizeProfile(nextProfile)
-    const validSizes = nextProfile === "kids" ? KIDS_SIZES : ADULT_SIZES
-    setSelectedSizes((currentSizes) =>
-      currentSizes.filter((size) => validSizes.includes(size))
-    )
+    const validSizes = new Set(nextProfile === "kids" ? KIDS_SIZES : ADULT_SIZES)
+    setSizeStocks((current) => current.filter((s) => validSizes.has(s.size)))
   }
 
   const handleCancelEdit = () => {
@@ -135,7 +142,7 @@ export function ProductForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!imagePreview || selectedSizes.length === 0) {
+    if (!imagePreview || sizeStocks.length === 0) {
       alert("Por favor, adicione uma imagem e selecione pelo menos um tamanho.")
       return
     }
@@ -168,7 +175,7 @@ export function ProductForm({
         team: formData.team,
         price: parseFloat(formData.price),
         description: formData.description,
-        sizes: selectedSizes,
+        sizes: sizeStocks,
         imageUrl,
       }
 
@@ -374,13 +381,14 @@ export function ProductForm({
                 </p>
               ) : null}
             </div>
+
             <div className="flex flex-wrap gap-2">
               {availableSizes.map((size) => (
                 <Badge
                   key={size}
-                  variant={selectedSizes.includes(size) ? "default" : "outline"}
+                  variant={selectedSizeNames.has(size) ? "default" : "outline"}
                   className={`cursor-pointer transition-colors ${
-                    selectedSizes.includes(size)
+                    selectedSizeNames.has(size)
                       ? "bg-primary text-primary-foreground hover:bg-primary/90"
                       : "border-border hover:border-primary/50"
                   }`}
@@ -390,6 +398,30 @@ export function ProductForm({
                 </Badge>
               ))}
             </div>
+
+            {sizeStocks.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-border bg-secondary/40 p-4">
+                <Label className="text-sm text-foreground">
+                  Quantidade em estoque por tamanho
+                </Label>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {sizeStocks.map(({ size, quantity }) => (
+                    <div key={size} className="flex items-center gap-2">
+                      <span className="w-12 shrink-0 text-right text-xs font-semibold text-muted-foreground">
+                        {size}
+                      </span>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={quantity}
+                        onChange={(e) => updateQuantity(size, e.target.value)}
+                        className="h-8 bg-input text-center text-sm"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">

@@ -16,7 +16,12 @@ const fallbackProduct: Product = {
   price: 299.9,
   description:
     "Camisa oficial do Fortaleza com presenca forte, acabamento premium e visual marcante.",
-  sizes: ["P", "M", "G", "GG"],
+  sizes: [
+    { size: "P", quantity: 1 },
+    { size: "M", quantity: 1 },
+    { size: "G", quantity: 1 },
+    { size: "GG", quantity: 1 },
+  ],
   imageUrl: "/uploads/fortaleza-home.jpg",
   createdAt: "2024-01-15T10:00:00Z",
 }

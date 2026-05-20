@@ -1,10 +1,15 @@
+export interface SizeStock {
+  size: string
+  quantity: number
+}
+
 export interface Product {
   id: string
   name: string
   team: string
   price: number
   description: string
-  sizes: string[]
+  sizes: SizeStock[]
   imageUrl: string
   createdAt: string
 }

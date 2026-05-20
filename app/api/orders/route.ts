@@ -3,7 +3,7 @@ import { z } from "zod"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
 import { StorageConfigurationError } from "@/lib/blob-json-store"
 import { createOrder, getOrders } from "@/lib/order-store"
-import { getProducts } from "@/lib/store"
+import { deductStock, getProducts } from "@/lib/store"
 import { sendNewOrderPushNotifications } from "@/lib/web-push"
 import type { CartItem } from "@/lib/types"
 
@@ -101,15 +101,27 @@ export async function POST(request: Request) {
         )
       }
 
+      const sizeStock = product.sizes.find(
+        (s) => s.size === incomingItem.size
+      )
       const hasSize =
         product.sizes.length === 0 ||
-        product.sizes.includes(incomingItem.size) ||
+        sizeStock !== undefined ||
         incomingItem.size === "Unico"
 
       if (!hasSize) {
         return NextResponse.json(
           {
             error: `O tamanho ${incomingItem.size} nao esta disponivel para ${product.name}.`,
+          },
+          { status: 400 }
+        )
+      }
+
+      if (sizeStock !== undefined && sizeStock.quantity < incomingItem.quantity) {
+        return NextResponse.json(
+          {
+            error: `Tamanho ${incomingItem.size} de ${product.name} esta esgotado ou sem estoque suficiente.`,
           },
           { status: 400 }
         )
@@ -150,6 +162,12 @@ export async function POST(request: Request) {
       totalPrice,
       status: "novo",
     })
+
+    await Promise.allSettled(
+      orderItems.map((item) =>
+        deductStock(item.productId, item.size, item.quantity)
+      )
+    )
 
     try {
       await sendNewOrderPushNotifications(order)

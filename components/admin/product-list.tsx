@@ -79,13 +79,17 @@ export function ProductList({
                     R$ {product.price.toFixed(2).replace(".", ",")}
                   </span>
                 </div>
-                <div className="mt-1 flex gap-1">
-                  {product.sizes.map((size) => (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {product.sizes.map(({ size, quantity }) => (
                     <span
                       key={size}
-                      className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                        quantity === 0
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-muted text-muted-foreground"
+                      }`}
                     >
-                      {size}
+                      {size}: {quantity}
                     </span>
                   ))}
                 </div>

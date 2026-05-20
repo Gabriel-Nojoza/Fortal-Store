@@ -54,7 +54,7 @@ export function useCart() {
   }, [items, isReady])
 
   function addToCart(product: Product, size?: string) {
-    const selectedSize = size || product.sizes[0] || DEFAULT_SIZE
+    const selectedSize = size || product.sizes[0]?.size || DEFAULT_SIZE
     const nextItem = createCartItem(product, selectedSize)
 
     setItems((current) => {
