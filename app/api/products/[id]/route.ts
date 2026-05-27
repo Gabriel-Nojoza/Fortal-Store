@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
 import { StorageConfigurationError } from "@/lib/blob-json-store"
 import { deleteProduct, getProduct, updateProduct } from "@/lib/store"
-import type { Product } from "@/lib/types"
+import type { Product, SizeStock } from "@/lib/types"
 
 function normalizeProductPayload(body: Record<string, unknown>) {
   const name = String(body.name || "").trim()
@@ -48,6 +48,17 @@ function normalizeProductPayload(body: Record<string, unknown>) {
   }
 }
 
+function mergeSizeStocks(currentSizes: SizeStock[], nextSizes: SizeStock[]) {
+  const currentQuantities = new Map(
+    currentSizes.map(({ size, quantity }) => [size, quantity])
+  )
+
+  return nextSizes.map(({ size, quantity }) => ({
+    size,
+    quantity: currentQuantities.get(size) ?? quantity,
+  }))
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -78,6 +89,7 @@ export async function PATCH(
     const nextProduct: Product = {
       ...currentProduct,
       ...payload,
+      sizes: mergeSizeStocks(currentProduct.sizes, payload.sizes),
     }
 
     const updated = await updateProduct(id, nextProduct)

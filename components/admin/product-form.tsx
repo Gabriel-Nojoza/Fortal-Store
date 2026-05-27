@@ -121,13 +121,6 @@ export function ProductForm({
     })
   }
 
-  const updateQuantity = (size: string, value: string) => {
-    const quantity = Math.max(0, parseInt(value, 10) || 0)
-    setSizeStocks((prev) =>
-      prev.map((s) => (s.size === size ? { ...s, quantity } : s))
-    )
-  }
-
   const handleSizeProfileChange = (nextProfile: SizeProfile) => {
     setSizeProfile(nextProfile)
     const validSizes = new Set(nextProfile === "kids" ? KIDS_SIZES : ADULT_SIZES)
@@ -380,6 +373,10 @@ export function ProductForm({
                   modelo.
                 </p>
               ) : null}
+              <p className="text-xs text-muted-foreground">
+                O estoque por tamanho sera ajustado na area separada de
+                controle de estoque.
+              </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -398,30 +395,6 @@ export function ProductForm({
                 </Badge>
               ))}
             </div>
-
-            {sizeStocks.length > 0 && (
-              <div className="space-y-2 rounded-lg border border-border bg-secondary/40 p-4">
-                <Label className="text-sm text-foreground">
-                  Quantidade em estoque por tamanho
-                </Label>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {sizeStocks.map(({ size, quantity }) => (
-                    <div key={size} className="flex items-center gap-2">
-                      <span className="w-12 shrink-0 text-right text-xs font-semibold text-muted-foreground">
-                        {size}
-                      </span>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={quantity}
-                        onChange={(e) => updateQuantity(size, e.target.value)}
-                        className="h-8 bg-input text-center text-sm"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">

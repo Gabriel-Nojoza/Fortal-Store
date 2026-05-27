@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import type { Product } from "@/lib/types"
+import type { Product, SizeStock } from "@/lib/types"
 
 async function requestProducts(): Promise<Product[]> {
   const response = await fetch("/api/products", {
@@ -53,11 +53,40 @@ export function useProducts() {
     setProducts((prev) => prev.filter((product) => product.id !== id))
   }, [])
 
+  const updateProductStock = useCallback(
+    async (id: string, sizes: SizeStock[]) => {
+      const response = await fetch(`/api/products/${id}/stock`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sizes }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(payload?.error || "Erro ao atualizar estoque")
+      }
+
+      const updatedProduct = (await response.json()) as Product
+
+      setProducts((prev) =>
+        prev.map((product) =>
+          product.id === id ? updatedProduct : product
+        )
+      )
+
+      return updatedProduct
+    },
+    []
+  )
+
   return {
     products,
     isLoading,
     error,
     deleteProduct,
+    updateProductStock,
     refreshProducts,
   }
 }

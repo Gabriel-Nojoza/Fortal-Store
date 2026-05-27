@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { LogOut, RefreshCw, ShoppingBag } from "lucide-react"
 import Link from "next/link"
 import { AuthProvider, useAuth } from "@/components/admin/auth-provider"
+import { InventoryPanel } from "@/components/admin/inventory-panel"
 import { LoginForm } from "@/components/admin/login-form"
 import { OrderNotesPanel } from "@/components/admin/order-notes-panel"
 import { OrdersPanel } from "@/components/admin/orders-panel"
@@ -19,7 +20,13 @@ import type { Order, Product } from "@/lib/types"
 
 function AdminDashboard() {
   const { isAuthenticated, logout } = useAuth()
-  const { products, isLoading, deleteProduct, refreshProducts } = useProducts()
+  const {
+    products,
+    isLoading,
+    deleteProduct,
+    updateProductStock,
+    refreshProducts,
+  } = useProducts()
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
 
@@ -130,32 +137,59 @@ function AdminDashboard() {
             Gerenciar Loja
           </h1>
           <p className="text-muted-foreground">
-            Cadastre produtos, acompanhe pedidos e confirme novas compras.
+            Cadastre produtos, ajuste estoque em uma area separada e acompanhe
+            os pedidos da loja.
           </p>
         </div>
 
         <PushNotificationSettings />
 
-        <div className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
-          <ProductForm
-            onSuccess={() => void refreshProducts()}
-            productToEdit={editingProduct}
-            onCancelEdit={() => setEditingProduct(null)}
-          />
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">
+              Cadastro de Produtos
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Use esta area para cadastrar, editar e organizar os dados dos
+              produtos.
+            </p>
+          </div>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            </div>
-          ) : (
-            <ProductList
-              products={products}
-              onEdit={(product) => setEditingProduct(product)}
-              onDelete={(id) => void handleDelete(id)}
-              isDeleting={isDeleting}
+          <div className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
+            <ProductForm
+              onSuccess={() => void refreshProducts()}
+              productToEdit={editingProduct}
+              onCancelEdit={() => setEditingProduct(null)}
             />
-          )}
-        </div>
+
+            {isLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              </div>
+            ) : (
+              <ProductList
+                products={products}
+                onEdit={(product) => setEditingProduct(product)}
+                onDelete={(id) => void handleDelete(id)}
+                isDeleting={isDeleting}
+              />
+            )}
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <InventoryPanel
+            products={products}
+            isLoading={isLoading}
+            onSaveStock={async (productId, sizes) => {
+              await updateProductStock(productId, sizes)
+              toast({
+                title: "Estoque atualizado",
+                description: "As quantidades por tamanho foram salvas.",
+              })
+            }}
+          />
+        </section>
 
         <div className="mt-8 grid gap-8 2xl:grid-cols-[1.2fr_0.8fr]">
           <OrdersPanel
